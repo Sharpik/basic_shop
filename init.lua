@@ -28,7 +28,7 @@ basic_shop.version = "20201129a"
 
 basic_shop.items_on_page = 8  -- gui setting
 basic_shop.maxprice = 1000000 -- maximum price players can set for 1 item
-basic_shop.max_noob_money = 100 -- after this player no longer allowed to sell his goods to admin shop to prevent inflation
+basic_shop.max_noob_money = 100000000 -- after this player no longer allowed to sell his goods to admin shop to prevent inflation
 
 basic_shop.time_left = 60*60*24*7*2; -- 2 week before shop removed/bank account reset
 
@@ -234,7 +234,7 @@ basic_shop.show_shop_gui = function(name)
 	"bgcolor[#222222cc; true]" ..
 	"background[0,0;8,8;gui_formbg.png;true]" ..
 
-	"label[0.4,-0.1;".. minetest.colorize("#6f6e6e", "Basic ") .. minetest.colorize("#6f6e6e", "Shop") .. "]" ..
+	"label[0.4,-0.1;".. minetest.colorize("#6f6e6e", "Basic ") .. minetest.colorize("#6f6e6e", "Online ") .. minetest.colorize("#6f6e6e", "Shop") .. "]" ..
 	"label[5,-0.1;" .. minetest.colorize("#aaa", "Your money: ".. get_money(minetest.get_player_by_name(name)) .. " $, shops ".. (player_shops[name] or 0)) .. "]" ..
 
 	"label[0.4,0.7;" .. minetest.colorize("#aaa", "item") .. "]" ..
@@ -263,7 +263,7 @@ basic_shop.show_shop_gui = function(name)
 		local time_left = ""
 		
 		ti = (t+ti); 
-		if ti> basic_shop.time_left then -- shop by pro player, no time limit
+		if (ti> basic_shop.time_left) or (data[id][5] == '*server*') then -- shop by pro player or server, no time limit
 			time_left = "no limit"
 		else
 			ti = ti/60; -- time left in minutes: time_left - (t-ti) = time_left-t + ti
@@ -285,7 +285,10 @@ basic_shop.show_shop_gui = function(name)
 			"label[3,".. y .. ";" .. minetest.colorize("#00ff36", data[id][3].." $") .."]" .. -- price
 			"label[5,".. y ..";" .. time_left .."]" .. -- time left
 			"label[6.5," .. y .. ";" .. minetest.colorize("#EE0", data[id][5]) .."]" .. -- seller
-			"image_button[8.5," .. y .. ";1.25,0.7;wool_black.png;buy".. id ..";buy ".. id .."]"  -- buy button
+			--"image_button[8.5," .. y .. ";1.25,0.7;wool_black.png;buy".. id ..";buy ".. id .."]"  -- buy button
+			"image_button[8.3," .. y .. ";0.7,0.7;wool_black.png;buy ".. id ..";+1]" ..  -- buy button
+			"image_button[8.8," .. y .. ";0.7,0.7;wool_black.png;buy ".. id ..";+10]" ..  -- buy button
+			"image_button[9.3," .. y .. ";0.8,0.7;wool_black.png;buy ".. id ..";+100]"  -- buy button
 			.."tooltip[buy".. id ..";".. data[id][1] .. "]"
 		else -- shop buys item and sells money
 			tabdata[i-idx+1] = 
@@ -294,7 +297,10 @@ basic_shop.show_shop_gui = function(name)
 			"label[0.4,".. y .. ";" .. minetest.colorize("#00ff36", -data[id][3].." $") .."]" .. -- price
 			"label[5,".. y ..";" .. time_left .."]" .. -- time left
 			"label[6.5," .. y .. ";" .. minetest.colorize("#EE0", data[id][5]) .."]" .. -- seller
-			"image_button[8.5," .. y .. ";1.25,0.7;wool_black.png;buy".. id ..";buy ".. id .."]"  -- buy button
+			--"image_button[8.5," .. y .. ";1.25,0.7;wool_black.png;buy".. id ..";sell ".. id .."]"  -- buy button
+			"image_button[8.3," .. y .. ";0.7,0.7;wool_black.png;sell ".. id ..";-1]" ..  -- buy button
+			"image_button[8.8," .. y .. ";0.7,0.7;wool_black.png;sell ".. id ..";-10]" ..  -- buy button
+			"image_button[9.3," .. y .. ";0.8,0.7;wool_black.png;sell ".. id ..";-100]"  -- buy button
 			.."tooltip[buy".. id ..";".. data[id][1] .. "]"
 		end
 	end
@@ -394,13 +400,37 @@ minetest.register_on_player_receive_fields(
 		end
 		
 		for k,v in pairs(fields) do
-			if string.sub(k,1,3) == "buy" then
-				local sel = tonumber(string.sub(v,5));
+			--minetest.chat_send_player(name,"#basic_shop DEBUG: k: "..k.." v: "..v)
+			--minetest.chat_send_player(name,"#basic_shop DEBUG: string.sub(k,1,3): "..string.sub(k,1,3))
+			--if string.sub(k,1,3) == "buy" then
+			local transfer = false
+			local sell = false
+			local pcs = 0
+			
+			if v == "-1" then pcs = 1; transfer = true; sell = true end
+			if v == "-10" then pcs = 10; transfer = true; sell = true end
+			if v == "-100" then pcs = 100; transfer = true; sell = true end
+			if v == "+1" then pcs = 1; transfer = true end
+			if v == "+10" then pcs = 10; transfer = true end
+			if v == "+100" then pcs = 100; transfer = true end
+			
+			
+			if transfer then
+				local sel = 0
+				--local sel = tonumber(string.sub(v,5));
+				if sell then
+					sel = tonumber(string.sub(k,6));
+				else
+					sel = tonumber(string.sub(k,5));
+				end
+				--minetest.chat_send_player(name,"#basic_shop DEBUG - sel: "..sel)
+				
 				if not sel then return end
 				local shop_item = basic_shop.data[sel];
 				if not shop_item then return end
 				local balance = get_money(player);
-				local price = shop_item[3];
+				--local price = shop_item[3];
+				local price = shop_item[3] * pcs;
 				local seller = shop_item[5]
 				
 				if price >=0 then -- normal mode, sell items, buy money
@@ -424,16 +454,19 @@ minetest.register_on_player_receive_fields(
 					end
 					
 					local inv = player:get_inventory();
-					inv:add_item("main",shop_item[1] .. " " .. shop_item[2]);
-					-- remove item from shop
+					inv:add_item("main",shop_item[1] .. " " .. shop_item[2] * pcs);
 					
-					shop_item[6] = shop_item[6] - shop_item[2];
-					shop_item[4] = minetest.get_gametime() -- time refresh
-					if shop_item[6]<=0 then --remove shop
-						player_shops[seller] = (player_shops[seller] or 1) - 1;
-						remove_shop(sel)
+					-- ShEdit
+					-- remove item from shop
+					if (seller ~= "*server*") then
+						shop_item[6] = shop_item[6] - (shop_item[2]  * pcs);
+						shop_item[4] = minetest.get_gametime() -- time refresh
+						if (shop_item[6]<=0) then --remove shop
+							player_shops[seller] = (player_shops[seller] or 1) - 1;
+							remove_shop(sel)
+						end
 					end
-					minetest.chat_send_player(name,"#basic_shop : you bought " .. shop_item[1] .." x " .. shop_item[2] .. ", price " .. price .." $")
+					minetest.chat_send_player(name,"#basic_shop : you bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", price " .. price .." $")
 				
 				else -- price<0 -> admin shop buys item, gives money to player
 					
@@ -445,11 +478,12 @@ minetest.register_on_player_receive_fields(
 					end
 					
 					local inv = player:get_inventory(); -- buyer, his name = name
-					if inv:contains_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2])) then
-						inv:remove_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2]));
-						balance = math.min(basic_shop.max_noob_money, balance-price)
+					
+					if inv:contains_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2] * pcs)) then
+						inv:remove_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2] * pcs));
+						balance = math.min(basic_shop.max_noob_money, balance - price)
 						set_money(player,balance)
-						minetest.chat_send_player(name,"#basic_shop : you sold " .. shop_item[1] .." x " .. shop_item[2] .. " for price " .. -price .." $")
+						minetest.chat_send_player(name,"#basic_shop : you sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .." $")
 						if balance>=basic_shop.max_noob_money then
 							minetest.chat_send_player(name,"#basic_shop : CONGRATULATIONS! you are no longer noob merchant. now you can make more shops - look in help in /shop screen.")
 						end
@@ -458,6 +492,9 @@ minetest.register_on_player_receive_fields(
 				end
 				
 				basic_shop.show_shop_gui(name)
+				--ShEdit
+				save_bank()
+				--save_shops()
 			end
 		end
 	end	
@@ -558,7 +595,7 @@ minetest.register_chatcommand("sell", {
 		local balance = get_money(player);
 		
 		local allow = true -- do we let player make new shop
-		if balance < 5 then -- new player
+		if balance < 0 then -- new player
 			minetest.chat_send_player(name,"#basic_shop: you need at least 5$ to sell items")
 			return
 		elseif balance<100 then -- noob
