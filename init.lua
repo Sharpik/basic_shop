@@ -276,9 +276,21 @@ basic_shop.show_shop_gui = function(name)
 				time_left =  math.floor(ti/1440*10)/10 .. "d"
 			end
 		end
-	
+		
+		local server_sell_form = ""
+		
 		local price = data[id][3]
 		if price>=0 then -- shop buys money and sells item
+			
+			if data[id][5] == "*server*" then
+			server_sell_form =			
+			"image_button[8.3," .. y .. ";0.7,0.7;wool_black.png;buy ".. id ..";+1]" ..  -- buy button
+			"image_button[8.8," .. y .. ";0.7,0.7;wool_black.png;buy ".. id ..";+10]" ..  -- buy button
+			"image_button[9.3," .. y .. ";0.8,0.7;wool_black.png;buy ".. id ..";+100]"  -- buy button
+			else
+			server_sell_form ="image_button[8.3," .. y .. ";1.25,0.7;wool_black.png;buy ".. id ..";buy]"  -- buy button
+			end
+			
 			tabdata[i-idx+1] = 
 			"item_image[0.4,".. y-0.1 .. ";0.7,0.7;".. data[id][1] .. "]" .. -- image
 			"label[1.1,".. y .. ";x ".. data[id][2] .. "/" .. data[id][6] .. "]" .. -- total_quantity
@@ -286,11 +298,19 @@ basic_shop.show_shop_gui = function(name)
 			"label[5,".. y ..";" .. time_left .."]" .. -- time left
 			"label[6.5," .. y .. ";" .. minetest.colorize("#EE0", data[id][5]) .."]" .. -- seller
 			--"image_button[8.5," .. y .. ";1.25,0.7;wool_black.png;buy".. id ..";buy ".. id .."]"  -- buy button
-			"image_button[8.3," .. y .. ";0.7,0.7;wool_black.png;buy ".. id ..";+1]" ..  -- buy button
-			"image_button[8.8," .. y .. ";0.7,0.7;wool_black.png;buy ".. id ..";+10]" ..  -- buy button
-			"image_button[9.3," .. y .. ";0.8,0.7;wool_black.png;buy ".. id ..";+100]"  -- buy button
+			server_sell_form
 			.."tooltip[buy".. id ..";".. data[id][1] .. "]"
 		else -- shop buys item and sells money
+			
+			if data[id][5] == "*server*" then
+			server_sell_form =
+			"image_button[8.3," .. y .. ";0.7,0.7;wool_black.png;sell ".. id ..";-1]" ..  -- buy button
+			"image_button[8.8," .. y .. ";0.7,0.7;wool_black.png;sell ".. id ..";-10]" ..  -- buy button
+			"image_button[9.3," .. y .. ";0.8,0.7;wool_black.png;sell ".. id ..";-100]"  -- buy button
+			else
+			server_sell_form ="image_button[8.3," .. y .. ";1.25,0.7;wool_black.png;sell ".. id ..";sell]"  -- buy button
+			end
+			
 			tabdata[i-idx+1] = 
 			"item_image[3.0,".. y-0.1 .. ";0.7,0.7;".. data[id][1] .. "]" .. -- image
 			"label[3.7,".. y .. ";x ".. data[id][2] .. "]" .. -- total_quantity
@@ -298,11 +318,10 @@ basic_shop.show_shop_gui = function(name)
 			"label[5,".. y ..";" .. time_left .."]" .. -- time left
 			"label[6.5," .. y .. ";" .. minetest.colorize("#EE0", data[id][5]) .."]" .. -- seller
 			--"image_button[8.5," .. y .. ";1.25,0.7;wool_black.png;buy".. id ..";sell ".. id .."]"  -- buy button
-			"image_button[8.3," .. y .. ";0.7,0.7;wool_black.png;sell ".. id ..";-1]" ..  -- buy button
-			"image_button[8.8," .. y .. ";0.7,0.7;wool_black.png;sell ".. id ..";-10]" ..  -- buy button
-			"image_button[9.3," .. y .. ";0.8,0.7;wool_black.png;sell ".. id ..";-100]"  -- buy button
+			server_sell_form
 			.."tooltip[buy".. id ..";".. data[id][1] .. "]"
 		end
+		server_sell_form = ""
 	end
 	
 	minetest.show_formspec(name, "basic_shop", form .. table.concat(tabdata,""))	
@@ -413,6 +432,8 @@ minetest.register_on_player_receive_fields(
 			if v == "+1" then pcs = 1; transfer = true end
 			if v == "+10" then pcs = 10; transfer = true end
 			if v == "+100" then pcs = 100; transfer = true end
+			if v == "buy" then pcs = 1; transfer = true; end
+			if v == "sell" then pcs = 1; transfer = true; sell = true end
 			
 			
 			if transfer then
