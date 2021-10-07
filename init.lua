@@ -46,6 +46,9 @@ basic_shop.admin_shops = { --{"item name", quantity, price, time_left, seller, m
 	[4] = {"default:tree",1,1.05,10^15,"*server*",1},
 	[5] = {"default:cobble",1,-0.15,10^15,"*server*",1},
 	[6] = {"default:cobble",1,0.45,10^15,"*server*",1},
+	--ShDebug
+	[7] = {"currency:minegeld", 1, -1, 10^15, "*server*", 1},
+	[8] = {"currency:minegeld", 1, 1, 10^15, "*server*", 1},
 }
 
 ---------------------
@@ -58,9 +61,25 @@ local filepath = minetest.get_worldpath()..'/' .. modname;
 minetest.mkdir(filepath) -- create if non existent
 
 save_shops = function()
-	local file,err = io.open(filepath..'/shops', 'wb'); 
+	local file,err = io.open(filepath..'/shops.txt', 'wb'); 
 	if err then minetest.log("#basic_shop: error cant save data") return end
 	file:write(minetest.serialize(basic_shop.data));file:close()
+end
+
+function lua_explode(s, delimiter)
+    result = {}
+    for match in (s..delimiter):gmatch("(.-)"..delimiter) do
+        table.insert(result, match)
+    end
+    return result
+end
+
+function check_mod(mod_item_or_node_name)
+	local mod = lua_explode(mod_item_or_node_name, ":")
+	if (minetest.get_modpath(mod[1]) ~= nil) then
+		return true
+	end
+	return false
 end
 
 local player_shops = {}; --[name] = count
@@ -69,7 +88,7 @@ load_shops = function()
 	local told = minetest.get_gametime()  - basic_shop.time_left; -- time of oldest shop before timeout
 	local data = {}
 	
-	local file,err = io.open(filepath..'/shops', 'rb')
+	local file,err = io.open(filepath..'/shops.txt', 'rb')
 
 	if err then 
 		minetest.log("#basic_shop: error cant load data. creating new shops.") 
@@ -85,9 +104,11 @@ load_shops = function()
 	end
 	
 	for i = 1,#data do
-		if data[i][4]>told then -- shop is recent, not too old, otherwise (skip) remove it
-			out[#out+1] = data[i]
-			player_shops[data[i][5]] = (player_shops[data[i][5]] or 0) + 1 -- how many shops player has
+		if (data[i][1] ~= "" ) and (check_mod(data[i][1])) then --Check if data filled in stores.txt are loaded or skip them
+			if data[i][4]>told then -- shop is recent, not too old, otherwise (skip) remove it
+				out[#out+1] = data[i]
+				player_shops[data[i][5]] = (player_shops[data[i][5]] or 0) + 1 -- how many shops player has
+			end
 		end
 	end
 	basic_shop.data = out
@@ -95,7 +116,7 @@ end
 
 local toplist = {};
 load_bank = function()
-	local file,err = io.open(filepath..'/bank', 'rb')
+	local file,err = io.open(filepath..'/bank.txt', 'rb')
 	if err then minetest.log("#basic_shop: error cant load bank data"); return end
 	local data = minetest.deserialize(file:read("*a")) or {}; file:close()
 	local out = {};
@@ -158,7 +179,7 @@ end
 
 
 save_bank = function()
-	local file,err = io.open(filepath..'/bank', 'wb'); 
+	local file,err = io.open(filepath..'/bank.txt', 'wb'); 
 	if err then minetest.log("#basic_shop: error cant save bank data") return end
 	file:write(minetest.serialize(basic_shop.bank)); file:close()
 end
@@ -282,6 +303,7 @@ basic_shop.show_shop_gui = function(name)
 		end
 		
 		local server_sell_form = ""
+		local tooltip_buy = "buy ".. id
 		
 		local price = data[id][3]
 		if price>=0 then -- shop buys money and sells item
@@ -303,9 +325,10 @@ basic_shop.show_shop_gui = function(name)
 			"label[6.5," .. y .. ";" .. minetest.colorize("#EE0", data[id][5]) .."]" .. -- seller
 			--"image_button[8.5," .. y .. ";1.25,0.7;wool_black.png;buy".. id ..";buy ".. id .."]"  -- buy button
 			server_sell_form
-			.."tooltip[buy".. id ..";".. data[id][1] .. "]"
+			.."tooltip[".. tooltip_buy ..";".. data[id][1] .. "]"
 		else -- shop buys item and sells money
 			
+			tooltip_buy = "sell ".. id
 			if data[id][5] == "*server*" then
 			server_sell_form =
 			"image_button[8.3," .. y .. ";0.7,0.7;wool_black.png;sell ".. id ..";-1]" ..  -- buy button
@@ -323,7 +346,7 @@ basic_shop.show_shop_gui = function(name)
 			"label[6.5," .. y .. ";" .. minetest.colorize("#EE0", data[id][5]) .."]" .. -- seller
 			--"image_button[8.5," .. y .. ";1.25,0.7;wool_black.png;buy".. id ..";sell ".. id .."]"  -- buy button
 			server_sell_form
-			.."tooltip[buy".. id ..";".. data[id][1] .. "]"
+			.."tooltip[".. tooltip_buy ..";".. data[id][1] .. "]"
 		end
 		server_sell_form = ""
 	end
