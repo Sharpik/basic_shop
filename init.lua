@@ -18,7 +18,7 @@ basic_shop = {};
 basic_shop.data = {}; -- {"item name", quantity, price, time_left, seller, minimal sell quantity}
 basic_shop.guidata = {}; -- [name] = {idx = idx, filter = filter, sort = sort } (start index on cur. page, filter item name, sort_coloumn)
 basic_shop.bank = {}; -- bank for offline players, [name] = {balance, deposit_time}, 
-basic_shop.version = "20201129a"
+basic_shop.version = "20211006se"
 
 
 
