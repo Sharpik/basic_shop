@@ -40,8 +40,12 @@ basic_shop.allowances = { -- how much money players need to make more shops and 
 
 -- 2 initial admin shops to get items
 basic_shop.admin_shops = { --{"item name", quantity, price, time_left, seller, minimal sell quantity}
-	[1] = {"default:dirt",1,-1,10^15,"*server*",1}, -- for skyblock
-	[2] = {"default:tree",1,-0.1,10^15,"*server*",1},
+	[1] = {"default:dirt",1,-0.1,10^15,"*server*",1},
+	[2] = {"default:dirt",1,0.3,10^15,"*server*",1},
+	[3] = {"default:tree",1,-0.35,10^15,"*server*",1},
+	[4] = {"default:tree",1,1.05,10^15,"*server*",1},
+	[5] = {"default:cobble",1,-0.15,10^15,"*server*",1},
+	[6] = {"default:cobble",1,0.45,10^15,"*server*",1},
 }
 
 ---------------------
