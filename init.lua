@@ -492,6 +492,7 @@ minetest.register_on_player_receive_fields(
 						end
 					end
 					minetest.chat_send_player(name,"#basic_shop : you bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", price " .. price .." $")
+					minetest.log("#basic_shop : Player: ".. name .." bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", price " .. price .." $")
 				
 				else -- price<0 -> admin shop buys item, gives money to player
 					
@@ -509,6 +510,7 @@ minetest.register_on_player_receive_fields(
 						balance = math.min(basic_shop.max_noob_money, balance - price)
 						set_money(player,balance)
 						minetest.chat_send_player(name,"#basic_shop : you sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .." $")
+						minetest.log("#basic_shop : Player: ".. name .." sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .." $")
 						if balance>=basic_shop.max_noob_money then
 							minetest.chat_send_player(name,"#basic_shop : CONGRATULATIONS! you are no longer noob merchant. now you can make more shops - look in help in /shop screen.")
 						end
@@ -535,6 +537,7 @@ minetest.register_on_joinplayer( -- if player has money from bank, give him the 
 			set_money(player,balance)
 			basic_shop.bank[name] = nil
 			minetest.chat_send_player(name,"#basic_shop: you get " .. bank_balance .. "$ from shops, new balance " .. balance .. "$ ")
+			minetest.log("#basic_shop: Player: " .. name .. " get " .. bank_balance .. "$ from shops, new balance " .. balance .. "$ ")
 		end
 	end
 )
