@@ -514,8 +514,8 @@ minetest.register_on_player_receive_fields(
 							remove_shop(sel)
 						end
 					end
-					minetest.chat_send_player(name,"#basic_shop : you bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", price " .. price .." $")
-					minetest.log("#basic_shop : Player: ".. name .." bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", price " .. price .." $")
+					minetest.chat_send_player(name,"#basic_shop : you bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", for price " .. price .."$ Your balance is " .. balance .. "$")
+					minetest.log("#basic_shop : Player: ".. name .." bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", for price " .. price .."$ Player balance is " .. balance .. "$")
 				
 				else -- price<0 -> admin shop buys item, gives money to player
 					
@@ -532,10 +532,13 @@ minetest.register_on_player_receive_fields(
 						inv:remove_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2] * pcs));
 						balance = math.min(basic_shop.max_noob_money, balance - price)
 						set_money(player,balance)
-						minetest.chat_send_player(name,"#basic_shop : you sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .." $")
-						minetest.log("#basic_shop : Player: ".. name .." sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .." $")
+						minetest.chat_send_player(name,"#basic_shop : you sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .."$ Your balance is " .. balance .. "$")
+						minetest.log("#basic_shop : Player: ".. name .." sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .."$ Player balance is " .. balance .. "$")
 						if balance>=basic_shop.max_noob_money then
 							minetest.chat_send_player(name,"#basic_shop : CONGRATULATIONS! you are no longer noob merchant. now you can make more shops - look in help in /shop screen.")
+						end
+						if (seller ~= "*server*") then
+							remove_shop(sel)
 						end
 					end
 					
@@ -585,7 +588,7 @@ end)
 -- CHATCOMMANDS
 
 minetest.register_chatcommand("shop", {  -- display shop browser
-	description = "",
+	description = "Open shop GUI",
 	privs = {
 		privs = interact
 	},
@@ -607,7 +610,7 @@ minetest.register_chatcommand("shop_top", {
 
 -- player selling his product - makes new shop
 minetest.register_chatcommand("sell", { 
-	description = "",
+	description = "Sell item in hand for <price>",
 	privs = {
 		privs = interact
 	},
@@ -691,8 +694,46 @@ minetest.register_chatcommand("sell", {
 	end
 })
 
+minetest.register_chatcommand("shop_sell", { 
+	description = "Admin shop offer",
+	privs = {
+		privs = kick
+	},
+	func = function(name, param)
+		local player = minetest.get_player_by_name(name); if not player then return end
+		local stack =  player:get_wielded_item()
+		local itemname = stack:get_name()
+			
+		local data = basic_shop.data;
+		--{"item name", quantity, price, time_left, seller}
+		data[#data+1 ] = { itemname, 1, tonumber(param), 10^15, "*server*", 1};
+		save_shops()
+		minetest.chat_send_player(name,"#basic_shop: Sell item " .. itemname .. " were added for " .. param .. " to the shop list!")
+		minetest.log(name,"#basic_shop: Sell item " .. itemname .. " were added for " .. param .. " to the shop list!")
+	end
+})
+
+minetest.register_chatcommand("shop_buy", { 
+	description = "Admin shop offer",
+	privs = {
+		privs = kick
+	},
+	func = function(name, param)
+		local player = minetest.get_player_by_name(name); if not player then return end
+		local stack =  player:get_wielded_item()
+		local itemname = stack:get_name()
+			
+		local data = basic_shop.data;
+		--{"item name", quantity, price, time_left, seller}
+		data[#data+1 ] = { itemname, 1, tonumber(param*-1), 10^15, "*server*", 1};
+		save_shops()
+		minetest.chat_send_player(name,"#basic_shop: Buy item " .. itemname .. " were added for " .. param .. " to the shop list!")
+		minetest.log(name,"#basic_shop: Buy item " .. itemname .. " were added for " .. param .. " to the shop list!")
+	end
+})
+
 minetest.register_chatcommand("shop_money", { 
-	description = "",
+	description = "Show how many money You have",
 	privs = {
 		privs = interact
 	},
@@ -717,5 +758,29 @@ minetest.register_chatcommand("shop_set_money", {
 		local player = minetest.get_player_by_name(pname); if not player then return end
 		set_money(player,amount)
 		minetest.chat_send_player(name,"#basic_shop: " .. param .. " now has " .. amount .. " money.")
+	end
+})
+
+minetest.register_chatcommand("shop_save", { 
+	description = "Save shops to shops.txt file",
+	privs = {
+		privs = kick
+	},
+	func = function(name, param)
+		save_bank()
+		save_shops()
+		minetest.chat_send_player(name,"#basic_shop: Shop list saved to file shops.txt!")
+	end
+})
+
+minetest.register_chatcommand("shop_load", { 
+	description = "Load shops from shops.txt file",
+	privs = {
+		privs = kick
+	},
+	func = function(name, param)
+		load_shops()
+		load_bank()
+		minetest.chat_send_player(name,"#basic_shop: Shop list loaded from file shops.txt!")
 	end
 })
