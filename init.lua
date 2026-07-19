@@ -270,7 +270,7 @@ minetest.after(0, function() -- problem: before this minetest.get_gametime() is 
 	load_shops()
 	load_bank()
 end)
-end)
+
 
 -- Give starting money to new players (create bank record if missing)
 minetest.register_on_joinplayer(function(player)
