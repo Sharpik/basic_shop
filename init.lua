@@ -90,10 +90,10 @@ save_shops = function()
 end
 
 save_to_log = function(log_text)
-	local file,err = io.open(filepath..'/transactions_log.csv', 'a'); 
-	if err then minetest.log("#basic_shop: error cant save transaction data") return end
-	file:write(log_text .. "\n") 
-    file:close()
+		local file,err = io.open(filepath..'/transactions_log.csv', 'wb'); 
+	if err then minetest.log("#basic_shop: error cant save transactions data") return end
+		file:write(log_text .. "\n")
+	file:close()
 end
 
 function lua_explode(s, delimiter)
@@ -546,9 +546,11 @@ minetest.register_on_player_receive_fields(
 						inv:remove_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2] * pcs));
 						balance = balance - price
 						set_money(player,balance)
+						
 						minetest.chat_send_player(name,"#basic_shop : You sold \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. -price .."$, Your balance is " .. balance .. "$")
-						minetest.log("#basic_shop : Player: ".. name .." sold \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. -price .."$, Player balance is " .. balance .. "$")
+						local msg_log = "#basic_shop : Player: ".. name .." sold \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. -price .."$, Player balance is " .. balance .. "$"
 						local msg_log_csv = os.date("%Y-%m-%d %H:%M:%S") .. ";" .. name ..";sold;" .. shop_item[1] ..";" .. pcs .. ";" .. -price ..";" .. balance .. "$"
+						minetest.log(msg_log)
 						save_to_log(msg_log_csv)
 					end
 					
