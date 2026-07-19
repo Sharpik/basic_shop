@@ -66,6 +66,13 @@ save_shops = function()
 	file:write(minetest.serialize(basic_shop.data));file:close()
 end
 
+save_to_log = function(log_text)
+	local file,err = io.open(filepath..'/transactions_log.csv', 'a'); 
+	if err then minetest.log("#basic_shop: error cant save transaction data") return end
+	file:write(log_text .. "\n") 
+    file:close()
+end
+
 function lua_explode(s, delimiter)
     result = {}
     for match in (s..delimiter):gmatch("(.-)"..delimiter) do
@@ -514,8 +521,12 @@ minetest.register_on_player_receive_fields(
 							remove_shop(sel)
 						end
 					end
+					
 					minetest.chat_send_player(name,"#basic_shop : you bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", for price " .. price .."$ Your balance is " .. balance .. "$")
-					minetest.log("#basic_shop : Player: ".. name .." bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", for price " .. price .."$ Player balance is " .. balance .. "$")
+					local msg_log = "#basic_shop : Player: ".. name .." bought " .. shop_item[1] .." x " .. shop_item[2] * pcs .. ", for price " .. price .."$ Player balance is " .. balance .. "$"
+					local msg_log_csv = name ..";bought;" .. shop_item[1] ..";" .. shop_item[2] * pcs .. ";" .. price ..";" .. balance .. "$"
+					minetest.log(msg_log)
+					save_to_log(msg_log_csv)
 				
 				else -- price<0 -> admin shop buys item, gives money to player
 					
@@ -534,6 +545,8 @@ minetest.register_on_player_receive_fields(
 						set_money(player,balance)
 						minetest.chat_send_player(name,"#basic_shop : you sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .."$ Your balance is " .. balance .. "$")
 						minetest.log("#basic_shop : Player: ".. name .." sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .."$ Player balance is " .. balance .. "$")
+						local msg_log_csv = name ..";sold;" .. shop_item[1] ..";" .. shop_item[2] * pcs .. ";" .. -price ..";" .. balance .. "$"
+						save_to_log(msg_log_csv)
 						if balance>=basic_shop.max_noob_money then
 							minetest.chat_send_player(name,"#basic_shop : CONGRATULATIONS! you are no longer noob merchant. now you can make more shops - look in help in /shop screen.")
 						end
