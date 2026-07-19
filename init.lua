@@ -522,8 +522,8 @@ minetest.register_on_player_receive_fields(
 						end
 					end
 					
-					minetest.chat_send_player(name,"#basic_shop : you bought " .. shop_item[1] .." x " .. pcs .. ", for price " .. price .."$ Your balance is " .. balance .. "$")
-					local msg_log = "#basic_shop : Player: ".. name .." bought " .. shop_item[1] .." x " .. pcs .. ", for price " .. price .."$ Player balance is " .. balance .. "$"
+					minetest.chat_send_player(name,"#basic_shop : You bought " .. shop_item[1] .." " .. pcs .. "x, for " .. price .."$, Your balance is " .. balance .. "$")
+					local msg_log = "#basic_shop : Player: ".. name .." bought " .. shop_item[1] .." " .. pcs .. "x, for " .. price .."$, Player balance is " .. balance .. "$"
 					local msg_log_csv = name ..";bought;" .. shop_item[1] ..";" .. pcs .. ";" .. price ..";" .. balance .. "$"
 					minetest.log(msg_log)
 					save_to_log(msg_log_csv)
@@ -543,8 +543,8 @@ minetest.register_on_player_receive_fields(
 						inv:remove_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2] * pcs));
 						balance = math.min(basic_shop.max_noob_money, balance - price)
 						set_money(player,balance)
-						minetest.chat_send_player(name,"#basic_shop : you sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .."$ Your balance is " .. balance .. "$")
-						minetest.log("#basic_shop : Player: ".. name .." sold " .. shop_item[1] .." x " .. shop_item[2] * pcs .. " for price " .. -price .."$ Player balance is " .. balance .. "$")
+						minetest.chat_send_player(name,"#basic_shop : You sold " .. shop_item[1] .." " .. pcs .. "x, for " .. -price .."$, Your balance is " .. balance .. "$")
+						minetest.log("#basic_shop : Player: ".. name .." sold " .. shop_item[1] .." " .. pcs .. "x, for " .. -price .."$, Player balance is " .. balance .. "$")
 						local msg_log_csv = name ..";sold;" .. shop_item[1] ..";" .. pcs .. ";" .. -price ..";" .. balance .. "$"
 						save_to_log(msg_log_csv)
 						if balance>=basic_shop.max_noob_money then
