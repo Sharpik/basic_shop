@@ -1,38 +1,27 @@
 --[[
-basic_shop by rnd, gui design by Jozet, 2018
-
-INSTRUCTIONS:
-	use /sell command to sell items (make shop).
-	admin can set up shops using negative price to make shop buy item from players - this way players can get money, but only up to 100.
-    
-
-TODO:
-	- ability to reverse money - item in admin shop OK
-		meaning: shop owner(admin) buys item and gives money to players. admin shop has infinite money
-		TODO: other players can do this too. problem: need additional storage for items if player not online
-	rating of shops: more money player gives for item more his rating is worth
+basic_eshop by Sharp, rnd and gui design by Jozet (2018)
 --]]
 
-modname = "basic_shop";
-basic_shop = {};
-basic_shop.data = {}; -- {"item name", quantity, price}
-basic_shop.guidata = {}; -- [name] = {idx = idx, filter = filter, sort = sort } (start index on cur. page, filter item name, sort_coloumn)
-basic_shop.bank = {}; -- bank for offline players, [name] = {balance, deposit_time}, 
-basic_shop.version = "20211006se"
-
-
+modname = "basic_eshop";
+basic_eshop = {};
+basic_eshop.data = {}; -- {"item name", quantity, price}
+basic_eshop.guidata = {}; -- [name] = {idx = idx, filter = filter, sort = sort } (start index on cur. page, filter item name, sort_coloumn)
+basic_eshop.bank = {};
+basic_eshop.version = "20260720se"
 
 -------------------------
 -- CONFIGURATION SETTINGS
 -------------------------
 
--- Admins must declare shops in shop.csv
+-- Starting money for new players (written to bank.csv). Change here to configure.
+basic_eshop.starting_money = 30
 
 ---------------------
 -- END OF SETTINGS
 ---------------------
 
--- Default starter shops (admins can edit these at top of this file)
+-- Admins must declare shops in prices.csv
+-- Default starter shop prices (admins can edit these at prices.csv file)
 local defaults = {
 	"default:dirt;1;-0.1",
 	"default:dirt;1;0.3",
@@ -44,67 +33,90 @@ local defaults = {
 	"currency:minegeld;1;1",
 }
 
--- Starting money for new players (written to bank.csv). Change here to configure.
-basic_shop.starting_money = 30
+-- Code
 
 local filepath = minetest.get_worldpath()..'/' .. modname;
-minetest.mkdir(filepath) -- create if non existent
+minetest.mkdir(filepath)
 
--- Debug function (var dump)
-function var_dump(own_table, indent)
-    indent = indent or ""
-    local msg_log = ""
-    
-    if type(own_table) == "table" then
-        for k, v in pairs(own_table) do
-            if type(v) == "table" then
-				msg_log = msg_log .. indent .. tostring(k) .. ":\n"
-				msg_log = msg_log .. var_dump(v, indent .. "  ")
-            else
-				msg_log = msg_log .. indent .. tostring(k) .. ": " .. tostring(v) .. "\n"
-            end
-        end
-    else
-        msg_log = msg_log .. indent .. tostring(own_table) .. "\n"
-    end
+-- forward declarations for functions used before their definitions
+local normalize_path, safe_open, number_to_string, lua_explode, check_toplist, save_bank
+local toplist = {}
+
+local function get_money(player_or_name)
+	local name
+	if type(player_or_name) == "string" then name = player_or_name
+	elseif player_or_name and player_or_name.get_player_name then name = player_or_name:get_player_name() end
+	if not name then return 0 end
+	local acc = basic_eshop.bank[name] or {0, 0}
+	return tonumber(acc[1]) or 0
+end
+
+local function save_bank()
+	local file,err = io.open(filepath..'/bank.csv', 'wb'); 
+	if err then minetest.log("#basic_eshop: error cant save bank data") return end
+	-- write CSV lines: name;balance;time (skip _top)
+	for k,v in pairs(basic_eshop.bank) do
+		if k ~= "_top" and type(v) == "table" then
+			local bal = number_to_string(tonumber(v[1]) or 0)
+			local tstamp = number_to_string(tonumber(v[2]) or 0)
+			file:write(k .. ";" .. bal .. ";" .. tstamp .. "\n")
+		end
+	end
+	file:close()
+end
+
+local function check_toplist(name,balance)
+	local mink = toplist["_min"];
+	local minb = toplist[mink] or 0;
+	if balance<minb then 
+		if toplist[name] then toplist["_min"] = name; toplist[name] = balance end
+		return
+	end 	
 	
-	if indent == "" then
-		minetest.log(msg_log)
+	local n = 0; for k,v in pairs(toplist) do n = n + 1 end
+	
+	local list = {};
+	toplist[name] = balance
+	
+	if n+1>10 then toplist[mink] = nil end
+	
+	minb = 10^9; mink = ""
+	for k,v in pairs(toplist) do
+		if k~="_min" and v<minb then mink = k; minb = v end
 	end
-
-	return msg_log
+	toplist["_min"] = mink
 end
 
-save_shops = function()
-	local file,err = io.open(filepath..'/shop.csv', 'wb'); 
-	if err then minetest.log("#basic_shop: error cant save data") return end
-	-- write CSV: itemname;quantity;price (simple CSV)
-	for i=1,#basic_shop.data do
-		local s = basic_shop.data[i]
-		local item = tostring(s[1] or "")
-		local qty = number_to_string(tonumber(s[2]) or 1)
-		local price = number_to_string(tonumber(s[3]) or 0)
-		file:write(item .. ";" .. qty .. ";" .. price .. "\n")
+local function set_money(player_or_name, amount)
+	local name
+	if type(player_or_name) == "string" then name = player_or_name
+	elseif player_or_name and player_or_name.get_player_name then name = player_or_name:get_player_name() end
+	if not name then return end
+	basic_eshop.bank[name] = {tonumber(amount) or 0, minetest.get_gametime()}
+	check_toplist(name, tonumber(amount) or 0)
+	save_bank()
+end
+
+local function save_to_log(log_text)
+	minetest.mkdir(filepath)
+	local file,err = io.open(filepath..'/transactions_log.csv', 'a')
+	if not file then
+		minetest.log("#basic_eshop: error cant save transaction data: " .. tostring(err))
+		return
 	end
+	file:write(log_text .. "\n")
 	file:close()
 end
 
-save_to_log = function(log_text)
-		local file,err = io.open(filepath..'/transactions_log.csv', 'wb'); 
-	if err then minetest.log("#basic_shop: error cant save transactions data") return end
-		file:write(log_text .. "\n")
-	file:close()
+lua_explode = function(s, delimiter)
+	local result = {}
+	for match in (s..delimiter):gmatch("(.-)"..delimiter) do
+		table.insert(result, match)
+	end
+	return result
 end
 
-function lua_explode(s, delimiter)
-    result = {}
-    for match in (s..delimiter):gmatch("(.-)"..delimiter) do
-        table.insert(result, match)
-    end
-    return result
-end
-
-function check_mod(mod_item_or_node_name)
+local function check_mod(mod_item_or_node_name)
 	local mod = lua_explode(mod_item_or_node_name, ":")
 	if (minetest.get_modpath(mod[1]) ~= nil) then
 		return true
@@ -112,8 +124,7 @@ function check_mod(mod_item_or_node_name)
 	return false
 end
 
--- Format numbers without scientific notation: full integer or trimmed decimals
-function number_to_string(n)
+number_to_string = function(n)
 	if type(n) ~= "number" then return tostring(n) end
 	if n == math.floor(n) then
 		return string.format("%.0f", n)
@@ -123,21 +134,21 @@ function number_to_string(n)
 	return s
 end
 
-load_shops = function()
+local load_prices = function()
 
 	local data = {}
 
-	local file,err = io.open(filepath..'/shop.csv', 'rb')
+	local file,err = io.open(filepath..'/prices.csv', 'rb')
 	local raw = ""
 	if err then
-		minetest.log("#basic_shop: shop.csv missing; creating default shop.csv")
+		minetest.log("#basic_eshop: prices.csv missing; creating default prices.csv")
 		local deftext = table.concat(defaults, "\n")
-		local wfile, werr = io.open(filepath..'/shop.csv', 'wb')
+		local wfile, werr = io.open(filepath..'/prices.csv', 'wb')
 		if wfile then
 			wfile:write(deftext .. "\n")
 			wfile:close()
 		else
-			minetest.log("#basic_shop: error cant create default shop.csv: " .. tostring(werr))
+			minetest.log("#basic_eshop: error cant create default prices.csv: " .. tostring(werr))
 		end
 		raw = deftext
 	else
@@ -161,22 +172,21 @@ load_shops = function()
 			out[#out+1] = data[i]
 		end
 	end
-	basic_shop.data = out
+	basic_eshop.data = out
 end
 
 local toplist = {};
-load_bank = function()
+local load_bank = function()
 	local file,err = io.open(filepath..'/bank.csv', 'rb')
 	if err then
-		minetest.log("#basic_shop: bank file missing or cannot be opened; initializing empty bank")
-		basic_shop.bank = {}
-		basic_shop.bank["_top"] = { ["_min"] = "" }
-		toplist = basic_shop.bank["_top"];
+		minetest.log("#basic_eshop: bank file missing or cannot be opened; initializing empty bank")
+		basic_eshop.bank = {}
+		basic_eshop.bank["_top"] = { ["_min"] = "" }
+		toplist = basic_eshop.bank["_top"];
 		return
 	end
 	local raw = file:read("*a") or ""; file:close()
 	local out = {};
-	-- CSV format only: lines like name;balance;time (no time filtering)
 	for line in raw:gmatch("[^\r\n]+") do
 		local parts = lua_explode(line, ";")
 		local name = parts[1]
@@ -187,11 +197,10 @@ load_bank = function()
 		end
 	end
 
-	basic_shop.bank = out
+	basic_eshop.bank = out
 
-	-- build toplist from bank balances (keep top 10)
 	local arr = {}
-	for k,v in pairs(basic_shop.bank) do
+	for k,v in pairs(basic_eshop.bank) do
 		if k ~= "_top" and type(v) == "table" then arr[#arr+1] = {k, v[1]} end
 	end
 	table.sort(arr, function(a,b) return a[2] > b[2] end)
@@ -206,16 +215,16 @@ load_bank = function()
 		if k ~= "_min" and v < minb then mink, minb = k, v end
 	end
 	top["_min"] = mink
-	basic_shop.bank["_top"] = top
-	toplist = basic_shop.bank["_top"];
+	basic_eshop.bank["_top"] = top
+	toplist = basic_eshop.bank["_top"];
 end
 
 local check_toplist = function(name,balance)
-	local mink = toplist["_min"]; -- minimal element on the list
-	local minb = toplist[mink] or 0; -- minimal value
+	local mink = toplist["_min"];
+	local minb = toplist[mink] or 0;
 	if balance<minb then 
 		if toplist[name] then toplist["_min"] = name; toplist[name] = balance end
-		return -- too small to be on toplist
+		return
 	end 
 	
 	local n = 0; for k,v in pairs(toplist) do n = n + 1 end
@@ -246,81 +255,41 @@ local display_toplist = function(name)
 		ret[#ret+1] = i .. ". " .. out[i][1] .. " " .. out[i][2]
 	end
 	local form = "size [6,7] textarea[0,0.1;6.6,8.5;TOP SHOPS;TOP RICHEST;".. table.concat(ret,"\n").."]"
-	minetest.show_formspec(name, "basic_shop:toplist", form)
-	
-	--minetest.chat_send_all(table.concat(ret,"\n"))
-end
-
-
-save_bank = function()
-	local file,err = io.open(filepath..'/bank.csv', 'wb'); 
-	if err then minetest.log("#basic_shop: error cant save bank data") return end
-	-- write CSV lines: name;balance;time (skip _top)
-	for k,v in pairs(basic_shop.bank) do
-		if k ~= "_top" and type(v) == "table" then
-			local bal = number_to_string(tonumber(v[1]) or 0)
-			local tstamp = number_to_string(tonumber(v[2]) or 0)
-			file:write(k .. ";" .. bal .. ";" .. tstamp .. "\n")
-		end
-	end
-	file:close()
+	minetest.show_formspec(name, "basic_eshop:toplist", form)
 end
 
 minetest.after(0, function() -- problem: before this minetest.get_gametime() is nil
-	load_shops()
+	load_prices()
 	load_bank()
 end)
 
-
--- Give starting money to new players (create bank record if missing)
 minetest.register_on_joinplayer(function(player)
 	local name = player:get_player_name()
-	if not basic_shop.bank[name] then
-		set_money(name, basic_shop.starting_money)
-		minetest.chat_send_player(name, "#basic_shop: You received starting money: " .. basic_shop.starting_money .. " $")
+	if not basic_eshop.bank[name] then
+		set_money(name, basic_eshop.starting_money)
+		minetest.chat_send_player(name, "#basic_eshop: You received starting money: " .. basic_eshop.starting_money .. " $")
 	end
 end)
 
 minetest.register_on_shutdown(function()
 	save_bank()
-	save_shops()
 end)
 
-get_money = function(player_or_name)
-	local name
-	if type(player_or_name) == "string" then name = player_or_name
-	elseif player_or_name and player_or_name.get_player_name then name = player_or_name:get_player_name() end
-	if not name then return 0 end
-	local acc = basic_shop.bank[name] or {0, 0}
-	return tonumber(acc[1]) or 0
+local init_guidata = function(name)
+	basic_eshop.guidata[name] = {idx = 1, filter = "",sort = 0, count = #basic_eshop.data};
 end
 
-set_money = function(player_or_name, amount)
-	local name
-	if type(player_or_name) == "string" then name = player_or_name
-	elseif player_or_name and player_or_name.get_player_name then name = player_or_name:get_player_name() end
-	if not name then return end
-	basic_shop.bank[name] = {tonumber(amount) or 0, minetest.get_gametime()}
-	check_toplist(name, tonumber(amount) or 0)
-	save_bank()
-end
-
-
-init_guidata = function(name)
-	basic_shop.guidata[name] = {idx = 1, filter = "",sort = 0, count = #basic_shop.data};
-end
-
-basic_shop.show_shop_gui = function(name)
+basic_eshop.show_shop_gui = function(name)
 	
-	local guidata = basic_shop.guidata[name];
-	if not guidata then init_guidata(name); guidata = basic_shop.guidata[name]; end
+	local guidata = basic_eshop.guidata[name];
+	if not guidata then init_guidata(name); guidata = basic_eshop.guidata[name]; end
 	
 	local idx = guidata.idx;
 	local sort = guidata.sort;
 	local filter = guidata.filter;
 	if string.find(filter,"%%") then filter = "" end
 	
-	local data = basic_shop.data; -- whole list of items for sale
+	local data = basic_eshop.data; -- whole list of items for sale
 	local idxdata = {}; -- list of idx of items for sale
 	
 	if filter == "" then
@@ -345,8 +314,8 @@ basic_shop.show_shop_gui = function(name)
 		end
 	end
 	
-	local m = #idxdata; -- show all items on one page
-	local n = #idxdata; -- how many items in current selection
+	local m = #idxdata;
+	local n = #idxdata;
 	local pricesort = "";
 	if guidata.sort == 1 then pricesort = "+" elseif guidata.sort == 2 then pricesort  = "-" end
 	
@@ -418,11 +387,8 @@ basic_shop.show_shop_gui = function(name)
 		server_sell_form = ""
 	end
 	
-	minetest.show_formspec(name, "basic_shop", form .. table.concat(tabdata,""))	
+	minetest.show_formspec(name, "basic_eshop", form .. table.concat(tabdata,""))	
 end
-
-local dout = minetest.chat_send_all;
-
 
 local make_table_copy = function(tab)
 	local out = {};
@@ -430,30 +396,22 @@ local make_table_copy = function(tab)
 	return out
 end
 
-local remove_shop = function(idx)
-	local data = {};
-	for i = 1,idx-1 do data[i] = make_table_copy(basic_shop.data[i]) end -- expensive, but ok for 'small'<1000 number of shops
-	for i = idx+1,#basic_shop.data do data[i-1] = make_table_copy(basic_shop.data[i]) end
-	basic_shop.data = data;
-end
-
-
 minetest.register_on_player_receive_fields(
 	function(player, formname, fields)
-		if formname~="basic_shop" then return end
+		if formname~="basic_eshop" then return end
 		local name = player:get_player_name()
-		if not basic_shop.guidata[name] then init_guidata(name) end
+		if not basic_eshop.guidata[name] then init_guidata(name) end
 		
 		if fields.help then
 			local name = player:get_player_name();
-				local text = "Admins can edit shop.csv to set available items and prices.\n\nUse /shop to browse and buy or sell item from the shop."
+				local text = "Admins can edit prices.csv to set available items and prices.\n\nUse /shop to browse and buy or sell items from the shop."
 				local form = "size [6,4] textarea[0,0;6.5,4.5;help;SHOP HELP;".. text.."]"
-				minetest.show_formspec(name, "basic_shop:help", form)
+				minetest.show_formspec(name, "basic_eshop:help", form)
 			return
 		end
 		
 		if fields.left then
-			local guidata = basic_shop.guidata[name]
+			local guidata = basic_eshop.guidata[name]
 			local idx = guidata.idx;
 			local n =  guidata.count;
 			local m = n;
@@ -461,35 +419,32 @@ minetest.register_on_player_receive_fields(
 			if idx<0 then idx = math.max(n - n%(m+1),0)+1 end
 			if idx>n then idx = math.max(n-m,1) end
 			guidata.idx = idx;
-			basic_shop.show_shop_gui(name)
+			basic_eshop.show_shop_gui(name)
 			return			
 		elseif fields.right then
-			local guidata = basic_shop.guidata[name]
+			local guidata = basic_eshop.guidata[name]
 			local idx = guidata.idx;
 			local n =  guidata.count;
 			local m = n;
 			idx = idx + m+1;
 			if idx>n then idx = 1 end
 			guidata.idx = idx;
-			basic_shop.show_shop_gui(name)
+			basic_eshop.show_shop_gui(name)
 			return
 		elseif fields.filter then
-			local guidata = basic_shop.guidata[name]
+			local guidata = basic_eshop.guidata[name]
 			guidata.filter = tostring(fields.search or "") or ""
-			if guidata.filter == "" then guidata.count = #basic_shop.data end
+			if guidata.filter == "" then guidata.count = #basic_eshop.data end
 			guidata.idx = 1
-			basic_shop.show_shop_gui(name)
+			basic_eshop.show_shop_gui(name)
 		elseif fields.price then -- change sorting
-			local guidata = basic_shop.guidata[name]
+			local guidata = basic_eshop.guidata[name]
 			guidata.sort = (guidata.sort+1)%3 --0,1,2
-			basic_shop.show_shop_gui(name)
+			basic_eshop.show_shop_gui(name)
 			return
 		end
 		
 		for k,v in pairs(fields) do
-			--minetest.chat_send_player(name,"#basic_shop DEBUG: k: "..k.." v: "..v)
-			--minetest.chat_send_player(name,"#basic_shop DEBUG: string.sub(k,1,3): "..string.sub(k,1,3))
-			--if string.sub(k,1,3) == "buy" then
 			local transfer = false
 			local sell = false
 			local pcs = 0
@@ -511,52 +466,50 @@ minetest.register_on_player_receive_fields(
 				else
 					sel = tonumber(string.sub(k,5));
 				end
-				--minetest.chat_send_player(name,"#basic_shop DEBUG - sel: "..sel)
 				
 				if not sel then return end
-				local shop_item = basic_shop.data[sel];
+				local shop_item = basic_eshop.data[sel];
 				if not shop_item then return end
 				local balance = get_money(player);
-				--local price = shop_item[3];
 				local price = shop_item[3] * pcs;
 
-				if price >=0 then -- normal mode, sell items, buy money
+				if price >=0 then -- Buy
 
 					if balance<price then
-						minetest.chat_send_player(name,"#basic_shop : you need " .. price .. " money to buy item " .. sel .. ", you only have " .. balance)
+						minetest.chat_send_player(name,"#basic_eshop : you need " .. price .. " money to buy item " .. sel .. ", you only have " .. balance)
 						return
 					end
-					balance = balance - price; set_money(player,balance) -- buyer pays to server (no payout)
+					balance = balance - price; set_money(player,balance)
 
 					local inv = player:get_inventory();
 					inv:add_item("main",shop_item[1] .. " " .. shop_item[2] * pcs);
 					
-					minetest.chat_send_player(name,"#basic_shop : You bought \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. price .."$, Your balance is " .. balance .. "$")
-					local msg_log = "#basic_shop : Player: ".. name .." bought \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. price .."$, Player balance is " .. balance .. "$"
-					local msg_log_csv = os.date("%Y-%m-%d %H:%M:%S") .. ";" .. name ..";bought;" .. shop_item[1] ..";" .. pcs .. ";" .. price ..";" .. balance .. "$"
+					minetest.chat_send_player(name,"#basic_eshop : You bought \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. price .."$, Your balance is " .. balance .. "$")
+					local msg_log = "#basic_eshop : Player: ".. name .." bought \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. price .."$, Player balance is " .. balance .. "$"
+					local msg_log_csv = os.date("%Y-%m-%d %H:%M:%S") .. ";" .. name ..";bought;" .. shop_item[1] ..";" .. pcs .. ";" .. number_to_string(price) .. ";" .. number_to_string(balance)
 					minetest.log(msg_log)
 					save_to_log(msg_log_csv)
 				
-				else
+				else -- Sell
 					
 					local balance = get_money(player);
-					local inv = player:get_inventory(); -- buyer, his name = name
+					local inv = player:get_inventory();
 
 					if inv:contains_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2] * pcs)) then
 						inv:remove_item("main",ItemStack(shop_item[1] .. " " .. shop_item[2] * pcs));
 						balance = balance - price
 						set_money(player,balance)
-						
-						minetest.chat_send_player(name,"#basic_shop : You sold \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. -price .."$, Your balance is " .. balance .. "$")
-						local msg_log = "#basic_shop : Player: ".. name .." sold \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. -price .."$, Player balance is " .. balance .. "$"
-						local msg_log_csv = os.date("%Y-%m-%d %H:%M:%S") .. ";" .. name ..";sold;" .. shop_item[1] ..";" .. pcs .. ";" .. -price ..";" .. balance .. "$"
+
+						minetest.chat_send_player(name,"#basic_eshop : You sold \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. -price .."$, Your balance is " .. balance .. "$")
+						local msg_log = "#basic_eshop : Player: ".. name .." sold \"" .. shop_item[1] .."\" " .. pcs .. "x, for " .. -price .."$, Player balance is " .. balance .. "$"
+						local msg_log_csv = os.date("%Y-%m-%d %H:%M:%S") .. ";" .. name ..";sold;" .. shop_item[1] ..";" .. pcs .. ";" .. number_to_string(-price) .. ";" .. number_to_string(balance)
 						minetest.log(msg_log)
 						save_to_log(msg_log_csv)
 					end
 					
 				end
 				
-				basic_shop.show_shop_gui(name)
+				basic_eshop.show_shop_gui(name)
 				save_bank()
 			end
 		end
@@ -565,13 +518,13 @@ minetest.register_on_player_receive_fields(
 
 -- CHATCOMMANDS
 
-minetest.register_chatcommand("shop", {  -- display shop browser
+minetest.register_chatcommand("shop", {
 	description = "Open shop GUI",
 	privs = {
 		privs = interact
 	},
 	func = function(name, param)
-		basic_shop.show_shop_gui(name)
+		basic_eshop.show_shop_gui(name)
 	end
 });
 
@@ -593,7 +546,7 @@ minetest.register_chatcommand("shop_money", {
 	func = function(name, param)
 		if not param or param == "" then param = name end
 		local bal = get_money(param)
-		minetest.chat_send_player(name,"#basic_shop: " .. param .. " has " .. bal .. " money.")
+		minetest.chat_send_player(name,"#basic_eshop: " .. param .. " has " .. bal .. " money.")
 	end
 })
 
@@ -608,30 +561,18 @@ minetest.register_chatcommand("shop_set_money", {
 		if not pname or not amount then minetest.chat_send_player(name,"usage: shop_set_money NAME AMOUNT") return end
 		amount = tonumber(amount) or 0;
 		set_money(pname,amount)
-		minetest.chat_send_player(name,"#basic_shop: " .. param .. " now has " .. amount .. " money.")
+		minetest.chat_send_player(name,"#basic_eshop: " .. param .. " now has " .. amount .. " money.")
 	end
 })
 
-minetest.register_chatcommand("shop_save", { 
-	description = "Save shops to shop.csv file",
+minetest.register_chatcommand("shop_reload", { 
+	description = "Reload shops from prices.csv file",
 	privs = {
 		privs = kick
 	},
 	func = function(name, param)
-		save_bank()
-		save_shops()
-		minetest.chat_send_player(name,"#basic_shop: Shop list saved to file shop.csv!")
-	end
-})
-
-minetest.register_chatcommand("shop_load", { 
-	description = "Load shops from shop.csv file",
-	privs = {
-		privs = kick
-	},
-	func = function(name, param)
-		load_shops()
+		load_prices()
 		load_bank()
-		minetest.chat_send_player(name,"#basic_shop: Shop list loaded from file shop.csv!")
+		minetest.chat_send_player(name,"#basic_eshop: Shop list loaded from file prices.csv!")
 	end
 })
